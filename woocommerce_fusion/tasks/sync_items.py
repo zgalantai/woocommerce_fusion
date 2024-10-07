@@ -466,26 +466,45 @@ class SynchroniseItem(SynchroniseWooCommerce):
 					item_attribute.save()
 
 	def set_item_fields(self):
-		"""
-		If there exist any Field Mappings on `WooCommerce Server`, attempt to synchronise their values from
-		WooCommerce to ERPNext
-		"""
-		if self.item and self.woocommerce_product:
-			wc_server = frappe.get_cached_doc(
-				"WooCommerce Server", self.woocommerce_product.woocommerce_server
-			)
-			if wc_server.item_field_map:
-				for map in wc_server.item_field_map:
-					erpnext_item_field_name = map.erpnext_field_name.split(" | ")
-					woocommerce_product_field_value = self.woocommerce_product.get(map.woocommerce_field_name)
+    """
+    Ha letezik barmilyen mezolekepezes a WooCommerce Serveren, megprobaljuk a WooCommerce ertekeket
+    szinkronizalni az ERPNext-tel.
+    Ezen kivul a WooCommerce ean_vonalkod erteket frissitjuk az ERPNext barcode mezojeben.
+    """
+    if self.item and self.woocommerce_product:
+        wc_server = frappe.get_cached_doc(
+            "WooCommerce Server", self.woocommerce_product.woocommerce_server
+        )
+        
+        # Meta_data ellenorzese es ean_vonalkod mezo lekerese ACF-bol
+        ean_vonalkod = None
+        for meta in self.woocommerce_product.meta_data:
+            if meta.get('key') == 'ean_vonalkod':  # Az ACF mezo neve itt
+                ean_vonalkod = meta.get('value')
+                break
+        
+        # Szinkronizaljuk a ean_vonalkod mezot az ERPNext barcode mezjevel
+        if ean_vonalkod:
+            frappe.db.set_value(
+                "Item",
+                self.item.item.name,
+                "barcode",
+                ean_vonalkod,
+                update_modified=False,
+            )
 
-					frappe.db.set_value(
-						"Item",
-						self.item.item.name,
-						erpnext_item_field_name[0],
-						woocommerce_product_field_value,
-						update_modified=False,
-					)
+        if wc_server.item_field_map:
+            for map in wc_server.item_field_map:
+                erpnext_item_field_name = map.erpnext_field_name.split(" | ")
+                woocommerce_product_field_value = self.woocommerce_product.get(map.woocommerce_field_name)
+
+                frappe.db.set_value(
+                    "Item",
+                    self.item.item.name,
+                    erpnext_item_field_name[0],
+                    woocommerce_product_field_value,
+                    update_modified=False,
+                )
 
 	def set_product_fields(
 		self, woocommerce_product: WooCommerceProduct, item: ERPNextItemToSync
